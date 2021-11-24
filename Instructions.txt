@@ -1,0 +1,30 @@
+John Jozwiak on 2018 July 30.
+
+I chose to depend on the mmap system call to allow the specified Posix underpinnings
+to let me work with files in page size chunks, where the operating system can keep
+in memory only what is being accessed.   Thereby this solution should allow files
+much larger than system memory.
+
+Usage is pretty straightforward.
+
+  go build
+
+will compile and yield a binary "scottsdale".
+
+  go clean
+
+will clean up the generated binary.
+
+This binary serves both the role of server and of client, depending on invocation.
+Type "scottsdale" by itself for instructions.
+
+To build a docker image, stored locally, based off AmazonLinux from dockerhub, 
+and in which we installed whatever we need (edit our coreographAmazonLinux.dockerfile),
+which will be an image stored locally:
+
+  docker build -t blah -f coreographAmazonLinux.dockerfile .
+
+To then use this image we just composed:
+
+  docker run -it blah
+

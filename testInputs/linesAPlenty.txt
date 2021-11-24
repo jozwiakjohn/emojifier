@@ -1,0 +1,438 @@
+// john jozwiak on 2016 11 23
+// john jozwiak for the SureGenomics proof of concept, 20161212 in Carlsbad/San Marcos.
+// trying to make a proper commandline to use with AWS for SureGenomics.
+
+package main
+
+
+import (
+         "fmt"
+         "os"
+         "io"
+         "bytes"
+         "encoding/base64"
+         "compress/zlib"
+         "encoding/json"
+         "reflect"
+//       "strings"
+//       "sort"
+         "regexp"
+         "path"
+         "path/filepath"
+         "io/ioutil"
+         "archive/zip"
+         "log"
+//       "github.com/aws/aws-sdk-go"  //  will be found in GOPATH tree.
+       )
+
+
+func  echo() {
+	b := make( []byte , 1 )
+	for {
+	   _,err := os.Stdin.Read(b)
+	   if err == io.EOF { break }
+	   os.Stdout.Write(b)
+	}
+   }
+
+
+var   getchar_byte_slice []byte = make( []byte , 1 )
+
+
+func  getchar( file io.Reader )  (byte,bool)  {  //  returns char and eof_found
+
+      _,err := file.Read(getchar_byte_slice)
+      if err == io.EOF {
+         return 0,true
+      } else {
+         return getchar_byte_slice[0],false
+      }
+
+   }
+
+
+func  filter ( prefix     string    ,
+               suffix     string    ,
+               file       io.Reader ,
+               blurbEater func(string) ) {
+
+   var eof_reached       bool            = false
+   var k                 byte
+   var num_matched_bytes int             = 0
+   var num_to_match      int             = len(prefix)
+   var buf               bytes.Buffer
+
+   for !eof_reached {
+
+      num_matched_bytes = 0
+      buf.Reset()
+
+      for !eof_reached && (num_matched_bytes < num_to_match) {
+         k,eof_reached = getchar( file )
+         if k == prefix[num_matched_bytes] {
+            num_matched_bytes++
+         } else {
+            num_matched_bytes = 0
+            break
+         }
+      }
+
+      if num_matched_bytes == num_to_match {
+
+         // fmt.Fprintf(&buf,"'")  /  just write what's between delimiters.
+
+         var blurb_done bool = false
+
+         for !eof_reached && !blurb_done {
+            k,eof_reached = getchar( file )
+            if k != suffix[0] {
+               fmt.Fprintf(&buf,"%c",k)
+            } else {
+               blurb_done = true
+               //fmt.Fprintf(&buf,"%c",k)  //  just write what's between delimiters.
+            }
+         }
+
+         var s string = buf.String()
+
+         data,err := base64.StdEncoding.DecodeString( s )
+         if err != nil {
+            fmt.Println( "Dang:  base64 decoding failure ",err)
+         } else {
+            r,err := zlib.NewReader( bytes.NewBuffer(data) )
+            if err != nil {
+               fmt.Println( "Dang:  zlib decompression failure",err)
+            } else {
+               var jsbuf = new(bytes.Buffer)
+               jsbuf.ReadFrom(r)
+               var f interface{}
+               json.Unmarshal( jsbuf.Bytes() , &f )
+               blurbEater( jsbuf.String() , f )
+            }
+         }
+      }
+   }
+}
+
+
+type (
+        json_array []interface{}
+        json_map   map[string]interface{}
+     )
+
+
+func  prometheaseJsonProcessor( json string , ) {
+
+      //  https://eager.io/blog/go-and-json/
+
+      fmt.Println( json )
+      typeofjson := reflect.TypeOf(json).Kind().String()
+      fmt.Println(typeofjson)
+
+      if typeofjson == "slice" {
+
+//       json_array_of_maps := f.([]interface{})
+
+//       fmt.Printf( "%T\n" , json_array_of_maps )
+//       for index,value := range json_array_of_maps {
+//          m := value.(map[string]interface{})
+//          fmt.Printf("     [%2d] ----> [%#v]\n", index, m)
+//          for k,_ := range m {
+//             fmt.Printf("          %s\n",k)
+//             fields[k] = true
+//          }
+//       }
+      }
+
+      if typeofjson == "map" {
+
+//       json_map := f.(map[string]interface{})
+
+//       fmt.Printf( "%T\n" , json_map )
+//       for k,_ := range json_map {
+//             fmt.Printf("     MAP\n%s",k)
+//       }
+      }
+
+
+/*    return
+      var fields            map[string]bool = make( map[string]bool )
+      var variables []string = make( []string , 0 , 100 )
+      fmt.Printf("\n\nAnd the fields are...\n%#v\n\n",fields)
+      var i uint32 = 0
+      for lhs,_ := range fields {
+         fmt.Printf("     :o   %s\n",lhs)
+         variables = append( variables , lhs )
+         i++
+      }
+
+      sort.Strings(variables)
+      fmt.Printf("\nsorted fields are %#v\n", variables)
+*/
+
+/*
+    def  quote_if_type_str( x ):
+      tn = ('str' == type(x).__name__)
+      r  = ''
+      if tn: r = r + '\''
+      r = r + str(x)
+      if tn: r = r + '\''
+      return r
+
+    //////////
+
+    def  process_promethease_map( m ):  #  a blurb as encoded then compressed in the Promethease reports.
+
+      for k in m:
+        dict_vars[ str(k) ] = type(m[k]).__name__
+
+      if   ('chrom' in m) and ('pos' in m):
+        read_records.append(m)
+
+      elif (all([('rs' in k) or ('i' in k) for k in m.keys()])):
+        for k in m.keys():
+          rsid_records[k] = m[k]
+
+      elif ('title' in m):
+        gsid_records.append(m)
+
+      elif ('rsnum' in m) and ('rstext' in m):
+        rsnum_records.append(m)
+
+      else:
+        #print('WHATON\n',m,'\n')
+        print( '{' )
+        for k in sorted(m.keys()):
+          tn = ( 'str' == type( m[k] ).__name__ )
+          print( '     ',k,':', quote_if_type_str(m[k]) )
+        print( '}\n' )
+
+    //////////
+
+    if 'list' == type(json).__name__:
+      for m in json:
+        process_promethease_map(m)
+
+    if 'dict' == type(json).__name__:
+      process_promethease_map(json)
+*/
+}
+
+
+func  help() {
+
+      var cmdname string = os.Args[0]
+      var message string =
+`
+   %s is the SureGenomics commandline tool, with commandline arguments as follows.
+
+      help                                                                  ... prints this message
+      version                                                               ... prints the version of sg.
+      path/to/prometheaseZipFile  nameForSQLiteFile                         ... extracts SNPedia from zip and creates an SQLite3 file.
+
+   Copyright 2016,2017 SureGenomics (send requests to jozwiakjohn@gmail.com)
+
+`
+/*
+      aws     s3 upload   user <U> passkey <P> <S3BUCKET>                   ... places a file test.txt in the S3 bucket specified.
+      aws     s3 download user <U> passkey <P> <S3BUCKET> <localdirectory>  ... downloads
+      vcf     merge <OUTPUT_VCF> from <list of VCFs>                        ... maybe use GATK, or something
+      snpedia 23andme <23andme file>                                        ... to stdout ?
+*/
+      fmt.Printf( message , cmdname )
+   }
+
+
+//  dict_vars     = {}
+//  lineno        = 0
+//  read_records  = []
+//  rsid_records  = {}
+//  gsid_records  = []
+//  rsnum_records = []
+
+
+func  main() {
+
+        if len(os.Args) < 2 {
+           help()
+           return
+        }
+
+      //var args       []string = os.Args[1:]
+      //var n            int    = len( args )
+        var inputzipfile string = os.Args[1]
+        var directory    string = path.Dir ( inputzipfile )
+        var filename     string = path.Base( inputzipfile )
+        var outputname   string = os.Args[2]
+        var outputpath   string = filepath.Join( "/tmp" , outputname + ".sqlite3" )
+
+        if found,_ := regexp.MatchString( `zip$` , filename ) ; !found {
+              help()
+              return
+           }
+
+        tmpdir,_ := ioutil.TempDir( "/tmp" , outputname+"_" )
+        defer os.RemoveAll(tmpdir)
+
+        fmt.Println("going to decode\n  ",inputzipfile, "\nsitting in directory\n  ",directory,"\nwith filename\n  ",filename,"\nworking in\n  ",tmpdir,"\ngenerating\n  ",outputpath)
+
+        r, err := zip.OpenReader( inputzipfile )
+        if err != nil { log.Fatal(err) }
+        defer r.Close()
+
+        for _, f := range r.File {
+              if f.Name == "promethease.html" {
+                     // fmt.Println( "Found the zip file!" )
+                    rc, err := f.Open() ; if err != nil { log.Fatal(err) }
+                    defer rc.Close()
+
+                    filter( "decompressString('" , "')" , rc , prometheaseJsonProcessor )
+                 }
+           }
+   }
+
+
+//  https://github.com/aws/aws-sdk-go
+//  https://cloud.google.com/genomics/v1alpha2/gatk
+//  http://gatkforums.broadinstitute.org/wdl/discussion/2846/version-highlights-for-gatk-release-2-6
+//  https://siongui.github.io/2016/01/09/go-sqlite-example-basic-usage/
+//  go get -u github.com/mattn/go-sqlite3
+
+
+/*
+
+def  examine_records_list( t ):  #  t is a list of maps (aka records)
+  if 'list' != type(t).__name__:
+    print('oops, asked to examine records list for a non list of type',type(t).__name__,'\n')
+    return
+
+  field_types = {}
+
+  for r in t:
+    if 'dict' != type(r).__name__:
+      print('oops, asked to examine record not of map type but of type',type(r).__name__,'\n')
+      continue
+    for k in r.keys():
+      field_types[ k ] = type( r[k] ).__name__
+
+  fields_always_used = set(field_types.keys())
+  for r in t:
+    fields_always_used = fields_always_used & set(r.keys())
+
+  return ( field_types , fields_always_used )
+
+////////////////////////////////
+
+def  sql_ddl_from_field_to_types_dict( name , d ):
+
+  def type_p3_to_sql3( t ):
+    m = { 'str'   : 'text'    ,
+          'int'   : 'integer' ,
+          'float' : 'real'    ,
+          'bool'  : 'bool'
+        }
+    if t in m:
+      return m[t]
+    else:
+      return 'null'
+
+  column_names_and_types = []
+  for f in sorted(list(d.keys())):
+    column_names_and_types.append( ' ' + f + ' ' + type_p3_to_sql3(d[f]) + ' ')
+  o = 'create table ' + str(name) + '\n(\n  ' + ',\n  '.join(column_names_and_types) + '\n)'
+  return o
+
+////////////////////////////////
+
+func  summarize_table( name string , data ) {
+
+     var verbose bool = false
+
+     [field_types,fields_always_used] = data
+
+     fmt.Println("\nfields of",name,"records, in any record, and their types:")
+//   for f in sorted(list(field_types.keys())):
+//     print('  ',f, field_types[f] )
+
+     fmt.Println( sql_ddl_from_field_to_types_dict( name , field_types ) + "\n" )
+
+     fmt.Println("--  fields of",name,"records (in all records):")
+//   for f in sorted(list(fields_always_used)):
+//     fmt.Println( "--  ", f, field_types[f] )
+     fmt.Println()
+  }
+
+////////////////////////////////
+
+fmt.Println( "Everything is read in to memory: here is the summary of schema1 mappings variables (not values)" )
+s1vars = sorted(list(dict_vars.keys()))
+for x in s1vars:
+  print( '   ',x,dict_vars[x] )
+fmt.Println()
+
+fmt.Println( "\n##### the read records" )
+for r in read_records:
+  print( json.dumps(r,indent=2,sort_keys=True),'\n' )
+
+fmt.Println( "\n##### the rsid records" )
+for r in rsid_records:
+  print( r , '-->' , rsid_records[r] )  #  no need for json dumps
+
+fmt.Println( "\n##### the gsid records" )
+for r in gsid_records:
+  print( json.dumps(r,indent=2,sort_keys=True),'\n' )
+
+fmt.Println( "\n##### the rsnum records" )
+for r in rsnum_records:
+  print( json.dumps(r,indent=2,sort_keys=True),'\n' )
+
+fmt.Println( "\nnow, summaries and proposals\n" )
+
+////////////////////////////////
+
+summary_reads  = examine_records_list( read_records  )
+summary_gsids  = examine_records_list( gsid_records  )
+summary_rsnums = examine_records_list( rsnum_records )
+
+summarize_table('read' ,summary_reads )
+summarize_table('gsid' ,summary_gsids )
+summarize_table('rsnum',summary_rsnums)
+
+////////////////////////////////
+
+if 'indexwords' in sys.argv:
+
+  fields_to_index = ['rstext','genosummary']
+  words_to_index  = set()
+  words_to_ignore = set()
+
+  def  index_strings( table , fields ):
+    for   r in table:
+      for f in r:
+        if f in fields_to_index:
+          words = r[f].split(' ')
+          words = set( [ w.strip() for w in words ] )
+          global words_to_index
+          words_to_index = words_to_index | words
+
+  index_strings( read_records  , None )
+  index_strings( gsid_records  , None )
+  index_strings( rsnum_records , None )
+
+  print ('\nwords_to_index =',sorted(list(words_to_index)),'\n')
+
+////////////////////////////////
+
+print( '-- to do:  now make sqlite3 file with name' , outputpath )
+
+dbhandle = sqlite3.connect( outputpath )
+dbcursor = dbhandle.cursor()
+try:
+  dbcursor.execute('CREATE TABLE stocks (date text, trans text, symbol text, qty real, price real)')
+except:
+  pass
+dbcursor.execute("insert into stocks  values ('2016_12_28','buy','AAPL', 100.00 , 130.00 )")
+dbhandle.commit()
+dbhandle.close()
+
+*/

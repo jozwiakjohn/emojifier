@@ -1,0 +1,4 @@
+Hamburgers can be ordered as a hamburger with ketchup,
+or a plain double-pattied hamburger,
+or a hamburger with cheese,
+which is called a cheeseburger.
